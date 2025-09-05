@@ -157,5 +157,36 @@ class TestInsightLog(TestCase):
         with self.assertRaises(Exception) as ctx2:
             analyzer_data.get_requests()
         self.assertIn("Empty log file", str(ctx2.exception))
+        
+    def test_malformed_lines_are_counted_web(self): 
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) 
+        file_name = os.path.join(base_dir, 'logs-samples/nginx1.sample') 
+ 
+        # Load a good sample and append one malformed line 
+        with open(file_name, 'r') as f: 
+            good = f.read() 
+        bad_line = "THIS IS NOT A VALID NGINX LINE\n" 
+ 
+        # Pass data directly so the bad line reaches the extractor 
+        analyzer = InsightLogAnalyzer('nginx', data=good + "\n" + 
+    bad_line) 
+        # No filters → all lines are considered 
+        requests = analyzer.get_requests() 
+        self.assertTrue(len(requests) > 0) 
+ 
+        stats = analyzer.get_last_stats() 
+        self.assertIn('malformed_count', stats) 
+        self.assertEqual(stats['malformed_count'], 1) 
 
 
+        def test_malformed_auth_line(self):
+        # Simulate a malformed line (missing fields, incomplete format)
+        malformed_line = "May  4 22:00:32 server sshd: BAD LINE FORMAT"
+        auth_settings = get_service_settings('auth')
+
+        # Try parsing with get_auth_requests
+        requests = get_auth_requests(malformed_line, auth_settings['request_model'])
+
+        # We expect it not to crash; at least an empty or safe structure
+        self.assertIsInstance(requests, list)
+        self.assertEqual(len(requests), 0, "Malformed line should not produce valid requests")
