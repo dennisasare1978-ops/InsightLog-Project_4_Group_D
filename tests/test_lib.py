@@ -59,8 +59,8 @@ class TestInsightLog(TestCase):
         requests = get_web_requests(data, nginx_settings['request_model'])
         self.assertEqual(len(requests), 2, "get_web_requests#1")
         self.assertTrue('daedalu5' in requests[0].values(), "get_web_requests#2")
-        requests = get_web_requests(data, nginx_settings['request_model'],
-                                    nginx_settings['date_pattern'], nginx_settings['date_keys'])
+        requests = get_web_requests(
+            data, nginx_settings['request_model'],nginx_settings['date_pattern'], nginx_settings['date_keys'])
         self.assertEqual(requests[0]['DATETIME'], '2016-04-24 06:26:37', "get_web_requests#3")
         apache2_settings = get_service_settings('apache2')
         file_name = os.path.join(base_dir, 'logs-samples/apache1.sample')
@@ -68,8 +68,8 @@ class TestInsightLog(TestCase):
         requests = get_web_requests(data, apache2_settings['request_model'])
         self.assertEqual(len(requests), 1, "get_web_requests#4")
         self.assertTrue('daedalu5' in requests[0].values(), "get_web_requests#5")
-        requests = get_web_requests(data, apache2_settings['request_model'],
-                                    nginx_settings['date_pattern'], nginx_settings['date_keys'])
+        requests = get_web_requests(
+            data, apache2_settings['request_model'], nginx_settings['date_pattern'], nginx_settings['date_keys'])
         self.assertEqual(requests[0]['DATETIME'], '2016-05-04 11:31:39', "get_web_requests#3")
 
     def test_get_auth_requests(self):
@@ -83,8 +83,8 @@ class TestInsightLog(TestCase):
         self.assertEqual(len(requests), 18, "get_auth_requests#1")
         self.assertEqual(requests[17]['INVALID_PASS_USER'], 'root', "get_auth_requests#2")
         self.assertEqual(requests[15]['INVALID_USER'], 'admin', "get_auth_requests#3")
-        requests = get_auth_requests(data, auth_settings['request_model'],
-                                     auth_settings['date_pattern'], auth_settings['date_keys'])
+        requests = get_auth_requests(
+            data, auth_settings['request_model'],auth_settings['date_pattern'], auth_settings['date_keys'])
         self.assertEqual(requests[0]['DATETIME'][4:], '-05-04 22:00:32', "get_auth_requests#4")
 
     def test_logsanalyzer(self):
@@ -179,14 +179,12 @@ class TestInsightLog(TestCase):
         self.assertEqual(stats['malformed_count'], 1) 
 
 
-        def test_malformed_auth_line(self):
-        # Simulate a malformed line (missing fields, incomplete format)
-        malformed_line = "May  4 22:00:32 server sshd: BAD LINE FORMAT"
-        auth_settings = get_service_settings('auth')
+def test_malformed_auth_line():
+    malformed_line = "May  4 22:00:32 server sshd: BAD LINE FORMAT"
+    auth_settings = get_service_settings('auth')
 
-        # Try parsing with get_auth_requests
-        requests = get_auth_requests(malformed_line, auth_settings['request_model'])
+    requests = get_auth_requests(malformed_line, auth_settings['request_model'])
 
-        # We expect it not to crash; at least an empty or safe structure
-        self.assertIsInstance(requests, list)
-        self.assertEqual(len(requests), 0, "Malformed line should not produce valid requests")
+    assert isinstance(requests, list)
+    assert len(requests) == 0, "Malformed line should not produce valid requests"
+
