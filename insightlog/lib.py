@@ -360,14 +360,14 @@ class InsightLogAnalyzer:
             # No matches is fine; only the source being empty is an error
             return to_return
 
-        # wiFile-driven path
+        # File-driven path
         try:
             with open(self.filepath, 'r') as file_object:
                 any_line = False
                 for line in file_object:
-                    any_line = True
-                    if self.check_all_matches(line, self.__filters):
-                        to_return += line
+                     any_line = True
+                if self.check_all_matches(line, self.__filters):
+                    to_return += line
             if not any_line:
                 raise Exception("Empty log file (filepath)")
             return to_return
