@@ -83,30 +83,6 @@ def filter_data(log_filter, data=None, filepath=None, is_casesensitive=True, is_
     else:
         raise Exception("Data and filepath values are NULL!")
 
-    # BUG: This function returns None on error instead of raising
-    # BUG: No encoding handling in file reading (may crash on non-UTF-8 files)
-    # TODO: Log errors/warnings instead of print
-    return_data = ""
-    if filepath:
-        try:
-            with open(filepath, 'r') as file_object:
-                for line in file_object:
-                    if check_match(line, log_filter, is_regex, is_casesensitive, is_reverse):
-                        return_data += line
-            return return_data
-        except (IOError, EnvironmentError) as e:
-            print(e.strerror)
-            # TODO: Log error instead of print
-            # raise  # Should raise instead of just printing
-            return None
-    elif data:
-        for line in data.splitlines():
-            if check_match(line, log_filter, is_regex, is_casesensitive, is_reverse):
-                return_data += line+"\n"
-        return return_data
-    else:
-        # TODO: Better error message for missing data/filepath
-        raise Exception("Data and filepath values are NULL!")
 
 
 def check_match(line, filter_pattern, is_regex, is_casesensitive, is_reverse):
@@ -472,3 +448,26 @@ class InsightLogAnalyzer:
         pass  # Feature stub
 
 # TODO: Write more tests for edge cases, error handling, and malformed input
+
+if __name__ == "__main__":
+    import argparse, sys
+
+    parser = argparse.ArgumentParser(description="InsightLog quick runner")
+    parser.add_argument("service", choices=["nginx", "apache2", "auth"], help="Service type")
+    parser.add_argument("logfile", help="Path to log file")
+    parser.add_argument("--filter", dest="flt", default=None, help="Optional filter")
+    args = parser.parse_args()
+
+    try:
+        analyzer = InsightLogAnalyzer(args.service, filepath=args.logfile)
+        if args.flt:
+            analyzer.add_filter(args.flt)
+        results = analyzer.get_requests()
+        for r in results:
+            print(r)
+        stats = analyzer.get_last_stats()
+        if stats:
+            print(f"# stats: {stats}", file=sys.stderr)
+    except Exception as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
