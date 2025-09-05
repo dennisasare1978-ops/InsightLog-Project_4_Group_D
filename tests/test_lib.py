@@ -121,4 +121,26 @@ class TestInsightLog(TestCase):
         with self.assertRaises(Exception) as ctx:
             filter_data("anything", filepath="not_here.log")
         self.assertIn("File error", str(ctx.exception))
+        
+    def test_get_web_requests_includes_service(self):
+        nginx_settings = get_service_settings('nginx')
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        file_name = os.path.join(base_dir, 'logs-samples/nginx1.sample')
+
+        data = filter_data('192.10.1.1', filepath=file_name)
+    # current web extraction
+        reqs = get_web_requests(
+            data,
+            nginx_settings['request_model'],
+            nginx_settings['date_pattern'],
+            nginx_settings['date_keys'],
+            service='nginx', 
+            )
+        self.assertTrue(len(reqs) > 0)
+        self.assertIn('SERVICE', reqs[0])     # new harmonized key
+        self.assertEqual(reqs[0]['SERVICE'], 'nginx')  # source service name
+    # sanity on shared keys
+        for k in ['DATETIME', 'IP', 'METHOD', 'ROUTE', 'CODE']:
+            self.assertIn(k, reqs[0])
+
 
