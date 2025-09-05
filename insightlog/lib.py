@@ -127,19 +127,13 @@ def check_match(line, filter_pattern, is_regex, is_casesensitive, is_reverse):
     return check_result and not is_reverse
 
 
-def get_web_requests(data, pattern, date_pattern=None, date_keys=None):
+def get_web_requests(data, pattern, date_pattern=None, date_keys=None, service=None):
     """
     Analyze data (from the logs) and return list of requests formatted as the model (pattern) defined.
-    :param data: string
-    :param pattern: string
-    :param date_pattern: regex|None
-    :param date_keys: dict|None
-    :return: list
     """
-    # BUG: Output format inconsistent with get_auth_requests
-    # BUG: No handling/logging for malformed lines
     if date_pattern and not date_keys:
         raise Exception("date_keys is not defined")
+
     requests_dict = re.findall(pattern, data, flags=re.IGNORECASE)
     requests = []
     for request_tuple in requests_dict:
@@ -147,9 +141,16 @@ def get_web_requests(data, pattern, date_pattern=None, date_keys=None):
             str_datetime = __get_iso_datetime(request_tuple[1], date_pattern, date_keys)
         else:
             str_datetime = request_tuple[1]
-        requests.append({'DATETIME': str_datetime, 'IP': request_tuple[0],
-                         'METHOD': request_tuple[2], 'ROUTE': request_tuple[3], 'CODE': request_tuple[4],
-                         'REFERRER': request_tuple[5], 'USERAGENT': request_tuple[6]})
+        requests.append({
+            'DATETIME': str_datetime,
+            'SERVICE': service or 'web',  # <-- new harmonized field
+            'IP': request_tuple[0],
+            'METHOD': request_tuple[2],
+            'ROUTE': request_tuple[3],
+            'CODE': request_tuple[4],
+            'REFERRER': request_tuple[5],
+            'USERAGENT': request_tuple[6],
+        })
     return requests
 
 
@@ -227,14 +228,7 @@ def __get_auth_year():
 class InsightLogAnalyzer:
 
     def __init__(self, service, data=None, filepath=None):
-        """
-        Constructor, define service (nginx, apache2...), set data or filepath if needed
-        :param service: string: service name (nginx, apache2...)
-        :param data: string: data to be filtered if not from a file
-        :param filepath: string: file path from which the data will be loaded if data isn't defined
-        and you are not using the default service logs filepath
-        :return:
-        """
+        self.__service = service
         self.__filters = []
         self.__settings = get_service_settings(service)
         self.data = data
@@ -330,37 +324,50 @@ class InsightLogAnalyzer:
         Apply all defined patterns and return filtered data
         :return: string
         """
-        # BUG: Large files are read into memory at once (performance issue)
-        # BUG: No warning or log for empty files
         to_return = ""
-        if self.data:
+
+        # Data-driven path
+        if self.data is not None:
+            # Treat '', None, or whitespace-only as empty
+            if not str(self.data).strip():
+                raise Exception("Empty log file (data)")
             for line in self.data.splitlines():
                 if self.check_all_matches(line, self.__filters):
-                    to_return += line+"\n"
-        else:
+                    to_return += line + "\n"
+            # No matches is fine; only the source being empty is an error
+            return to_return
+
+        # File-driven path
+        try:
             with open(self.filepath, 'r') as file_object:
+                any_line = False
                 for line in file_object:
+                    any_line = True
                     if self.check_all_matches(line, self.__filters):
                         to_return += line
-        return to_return
+            if not any_line:
+                raise Exception("Empty log file (filepath)")
+            return to_return
+        except (IOError, EnvironmentError) as e:
+            # Align with filter_data behavior
+            raise Exception(f"File error: {e.strerror}") from e
+
+
+
 
     def get_requests(self):
-        """
-        Analyze data (from the logs) and return list of auth requests formatted as the model (pattern) defined.
-        :return:
-        """
-        # TODO: Add support for CSV and JSON output
         data = self.filter_all()
         request_pattern = self.__settings['request_model']
         date_pattern = self.__settings['date_pattern']
         date_keys = self.__settings['date_keys']
-        if self.__settings['type'] == 'web0':
-            return get_web_requests(data, request_pattern, date_pattern, date_keys)
+        if self.__settings['type'] == 'web' or self.__settings['type'] == 'web0':  # tolerate legacy value
+            return get_web_requests(data, request_pattern, date_pattern, date_keys, service=self.__service)
         elif self.__settings['type'] == 'auth':
             return get_auth_requests(data, request_pattern, date_pattern, date_keys)
         else:
-            # TODO: Support more log formats (e.g., IIS, custom logs)
             return None
+
+
 
     # TODO: Add log level filtering (e.g., only errors)
     def add_log_level_filter(self, level):
