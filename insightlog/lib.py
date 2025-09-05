@@ -51,9 +51,6 @@ def get_date_filter(settings, minute=datetime.now().minute, hour=datetime.now().
 def filter_data(log_filter, data=None, filepath=None, is_casesensitive=True, is_regex=False, is_reverse=False):
     """
     Filter received data/file content and return the results
-    :except IOError:
-    :except EnvironmentError:
-    :raises Exception:
     :param log_filter: string
     :param data: string
     :param filepath: string
@@ -62,6 +59,30 @@ def filter_data(log_filter, data=None, filepath=None, is_casesensitive=True, is_
     :param is_reverse: boolean to inverse selection
     :return: string
     """
+    return_data = ""
+
+    if filepath:
+        try:
+            # Optional: encoding hardening; uncomment if desired
+            # with open(filepath, 'r', encoding='utf-8', errors='replace') as file_object:
+            with open(filepath, 'r') as file_object:
+                for line in file_object:
+                    if check_match(line, log_filter, is_regex, is_casesensitive, is_reverse):
+                        return_data += line
+            return return_data
+        except (IOError, EnvironmentError) as e:
+            # Raise (don’t print/return None)
+            raise Exception(f"File error: {e.strerror}") from e
+
+    elif data:
+        for line in data.splitlines():
+            if check_match(line, log_filter, is_regex, is_casesensitive, is_reverse):
+                return_data += line + "\n"
+        return return_data
+
+    else:
+        raise Exception("Data and filepath values are NULL!")
+
     # BUG: This function returns None on error instead of raising
     # BUG: No encoding handling in file reading (may crash on non-UTF-8 files)
     # TODO: Log errors/warnings instead of print

@@ -114,3 +114,11 @@ class TestInsightLog(TestCase):
         # The bug: remove_filter currently tries to remove by value, not index
 
 # TODO: Add more tests for edge cases and error handling
+
+
+    def test_filter_data_file_not_found(self):
+        from insightlog.lib import filter_data
+        with self.assertRaises(Exception) as ctx:
+            filter_data("anything", filepath="not_here.log")
+        self.assertIn("File error", str(ctx.exception))
+
