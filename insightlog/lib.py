@@ -3,7 +3,7 @@ import calendar
 from insightlog.settings import *
 from insightlog.validators import *
 from datetime import datetime
-
+import chardet  # <-- new import for encoding detection
 
 def get_service_settings(service_name):
     """
@@ -127,54 +127,79 @@ def check_match(line, filter_pattern, is_regex, is_casesensitive, is_reverse):
     return check_result and not is_reverse
 
 
-def get_web_requests(data, pattern, date_pattern=None, date_keys=None, service=None):
-    """
-    Analyze data (from the logs) and return list of requests formatted as the model (pattern) defined.
-    """
-    if date_pattern and not date_keys:
-        raise Exception("date_keys is not defined")
+def get_web_requests(data, pattern, date_pattern=None, date_keys=None, 
+service=None): 
+    """ 
+    Analyze data (from the logs) and return list of requests formatted 
+    as the model (pattern) defined. 
+    Also returns malformed_count for lines that do not match the 
+    expected pattern. 
+    """ 
+    if date_pattern and not date_keys: 
+        raise Exception("date_keys is not defined") 
+ 
+    requests = [] 
+    malformed_count = 0 
+    regex = re.compile(pattern, flags=re.IGNORECASE) 
+ 
+    for line in data.splitlines(): 
+        if not line.strip(): 
+            continue 
+        m = regex.search(line) 
+        if not m: 
+            malformed_count += 1 
+            continue 
+            request_tuple = m.groups() 
+        if date_pattern: 
+            str_datetime = __get_iso_datetime(request_tuple[1], 
+            date_pattern, date_keys) 
+        else: 
+            str_datetime = request_tuple[1] 
+            requests.append({ 
+            'DATETIME': str_datetime, 
+            'SERVICE': service or 'web', 
+            'IP': request_tuple[0], 
+            'METHOD': request_tuple[2], 
+            'ROUTE': request_tuple[3], 
+            'CODE': request_tuple[4], 
+            'REFERRER': request_tuple[5], 
+            'USERAGENT': request_tuple[6], 
+        }) 
+ 
+    return requests, malformed_count
 
-    requests_dict = re.findall(pattern, data, flags=re.IGNORECASE)
-    requests = []
-    for request_tuple in requests_dict:
-        if date_pattern:
-            str_datetime = __get_iso_datetime(request_tuple[1], date_pattern, date_keys)
-        else:
-            str_datetime = request_tuple[1]
-        requests.append({
-            'DATETIME': str_datetime,
-            'SERVICE': service or 'web',  # <-- new harmonized field
-            'IP': request_tuple[0],
-            'METHOD': request_tuple[2],
-            'ROUTE': request_tuple[3],
-            'CODE': request_tuple[4],
-            'REFERRER': request_tuple[5],
-            'USERAGENT': request_tuple[6],
-        })
-    return requests
 
-
-def get_auth_requests(data, pattern, date_pattern=None, date_keys=None):
-    """
-    Analyze data (from the logs) and return list of auth requests formatted as the model (pattern) defined.
-    :param data: string
-    :param pattern: string
-    :param date_pattern:
-    :param date_keys:
-    :return: list of dicts
-    """
-    requests_dict = re.findall(pattern, data)
-    requests = []
-    for request_tuple in requests_dict:
-        if date_pattern:
-            str_datetime = __get_iso_datetime(request_tuple[0], date_pattern, date_keys)
-        else:
-            str_datetime = request_tuple[0]
-        data = analyze_auth_request(request_tuple[2])
-        data['DATETIME'] = str_datetime
-        data['SERVICE'] = request_tuple[1]
-        requests.append(data)
-    return requests
+def get_auth_requests(data, pattern, date_pattern=None, 
+date_keys=None): 
+    """ 
+    Analyze data (from the logs) and return list of auth requests 
+    formatted as the model (pattern) defined. 
+    Also returns malformed_count for lines that do not match the 
+    expected pattern. 
+    """ 
+    requests = [] 
+    malformed_count = 0 
+    regex = re.compile(pattern) 
+ 
+    for line in data.splitlines(): 
+        if not line.strip(): 
+            continue 
+        m = regex.search(line) 
+        if not m: 
+            malformed_count += 1 
+            continue 
+        request_tuple = m.groups() 
+        if date_pattern: 
+            str_datetime = __get_iso_datetime(request_tuple[0], 
+    date_pattern, date_keys) 
+        else: 
+            str_datetime = request_tuple[0] 
+        data_dict = analyze_auth_request(request_tuple[2]) 
+        data_dict['DATETIME'] = str_datetime 
+        data_dict['SERVICE'] = request_tuple[1] 
+        requests.append(data_dict) 
+ 
+    return requests, malformed_count
 
 
 def analyze_auth_request(request_info):
@@ -228,8 +253,9 @@ def __get_auth_year():
 class InsightLogAnalyzer:
 
     def __init__(self, service, data=None, filepath=None):
-        self.__service = service
+        self._last_stats = {} 
         self.__filters = []
+        self.__service = service
         self.__settings = get_service_settings(service)
         self.data = data
         if filepath:
@@ -294,9 +320,6 @@ class InsightLogAnalyzer:
             raise ValueError(f"Filter index out of range: {index}") from None
 
 
-
-
-
     def clear_all_filters(self):
         """
         Clear all filters
@@ -342,30 +365,48 @@ class InsightLogAnalyzer:
             with open(self.filepath, 'r') as file_object:
                 any_line = False
                 for line in file_object:
-                    any_line = True
-                    if self.check_all_matches(line, self.__filters):
-                        to_return += line
+                     any_line = True
+                if self.check_all_matches(line, self.__filters):
+                    to_return += line
             if not any_line:
                 raise Exception("Empty log file (filepath)")
             return to_return
         except (IOError, EnvironmentError) as e:
-            # Align with filter_data behavior
             raise Exception(f"File error: {e.strerror}") from e
+        
+    def get_last_stats(self): 
+        """Return stats from the last get_requests() call (e.g., 
+        malformed_count).""" 
+        return self._last_stats
 
 
 
+    def get_requests(self): 
+        """ 
+        Analyze data (from the logs) and return list of requests. 
+        Side-effect: sets self._last_stats = {'malformed_count': ...} 
+        """ 
+        data = self.filter_all() 
+        request_pattern = self.__settings['request_model'] 
+        date_pattern = self.__settings['date_pattern'] 
+        date_keys = self.__settings['date_keys'] 
+ 
+        if self.__settings['type'] == 'web' or self.__settings['type'] == 'web0':
+            requests, malformed = get_web_requests( 
+            data, request_pattern, date_pattern, date_keys, 
+            service=self.__service 
+            ) 
+        elif self.__settings['type'] == 'auth': 
+            requests, malformed = get_auth_requests( 
+            data, request_pattern, date_pattern, date_keys 
+        ) 
+        else: 
+            self._last_stats = {'malformed_count': 0} 
+            return []   # ✅ fixed
 
-    def get_requests(self):
-        data = self.filter_all()
-        request_pattern = self.__settings['request_model']
-        date_pattern = self.__settings['date_pattern']
-        date_keys = self.__settings['date_keys']
-        if self.__settings['type'] == 'web' or self.__settings['type'] == 'web0':  # tolerate legacy value
-            return get_web_requests(data, request_pattern, date_pattern, date_keys, service=self.__service)
-        elif self.__settings['type'] == 'auth':
-            return get_auth_requests(data, request_pattern, date_pattern, date_keys)
-        else:
-            return None
+
+            self._last_stats = {'malformed_count': malformed} 
+            return requests 
 
 
 

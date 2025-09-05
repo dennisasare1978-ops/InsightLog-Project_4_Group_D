@@ -12,7 +12,7 @@ def main():
     analyzer = InsightLogAnalyzer(args.service, filepath=args.logfile)
     if args.filter:
         analyzer.add_filter(args.filter)
-    requests = analyzer.get_requests()
+    requests = analyzer.get_requests() or []   # ✅ fallback if something unexpected happens
     for req in requests:
         print(req)
 
