@@ -143,4 +143,19 @@ class TestInsightLog(TestCase):
         for k in ['DATETIME', 'IP', 'METHOD', 'ROUTE', 'CODE']:
             self.assertIn(k, reqs[0])
 
+    def test_empty_file_raises(self):
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        file_name = os.path.join(base_dir, 'logs-samples/empty.sample')
+
+        nginx_analyzer = InsightLogAnalyzer('nginx', filepath=file_name)
+        with self.assertRaises(Exception) as ctx:
+            nginx_analyzer.get_requests()
+        self.assertIn("Empty log file", str(ctx.exception))
+
+    # also cover the `data=` path
+        analyzer_data = InsightLogAnalyzer('nginx', data="")
+        with self.assertRaises(Exception) as ctx2:
+            analyzer_data.get_requests()
+        self.assertIn("Empty log file", str(ctx2.exception))
+
 
